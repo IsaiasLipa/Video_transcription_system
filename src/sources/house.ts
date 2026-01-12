@@ -8,6 +8,8 @@ import { getVideosToTranscribe, listVideos, updateVideoStatus, upsertVideo } fro
 import { VideoRecord } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 import { transcribeVideo } from "../transcription/videoTranscription";
+import { withRetry } from "../utils/retry";
+import { config } from "../config";
 
 
 const ARCHIVE_URL =
@@ -16,10 +18,9 @@ const ARCHIVE_URL =
 const VIDEO_BASE =
     "https://www.house.mi.gov/ArchiveVideoFiles/";
 
-const dispatcher =
-    process.env.INSECURE_TLS === "true"
-        ? new Agent({ connect: { rejectUnauthorized: false } })
-        : undefined;
+const dispatcher = config.insecureTls
+    ? new Agent({ connect: { rejectUnauthorized: false } })
+    : undefined;
 
 function isWithinLastMonth(date: Date) {
     const now = new Date();
@@ -29,7 +30,10 @@ function isWithinLastMonth(date: Date) {
 }
 
 export async function fetchHouseVideoObject() {
-    const res = dispatcher ? await fetch(ARCHIVE_URL, { dispatcher }) : await fetch(ARCHIVE_URL);
+    const res = await withRetry(
+        () => (dispatcher ? fetch(ARCHIVE_URL, { dispatcher }) : fetch(ARCHIVE_URL)),
+        { retries: 2, delayMs: 1000, factor: 2 },
+    );
 
     if (!res.ok) {
         throw new Error(`Failed to fetch archive page: ${res.status}`);
@@ -86,7 +90,10 @@ export async function dowloadVideo(id: string):Promise<string> {
         return filePath;
     }
 
-    const res = dispatcher ? await fetch(url, { dispatcher }) : await fetch(url);
+    const res = await withRetry(
+        () => (dispatcher ? fetch(url, { dispatcher }) : fetch(url)),
+        { retries: 2, delayMs: 1000, factor: 2 },
+    );
 
     if (!res.ok || !res.body) {
         throw new Error(`Failed to download ${url}`);

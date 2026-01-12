@@ -11,6 +11,7 @@ import { pipeline } from "stream/promises";
 import { transcribeVideo } from "../transcription/videoTranscription";
 import { listVideos, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
+import { withRetry } from "../utils/retry";
 
 export interface RawVideo {
     original_date: string,
@@ -35,15 +36,19 @@ export interface RawVideoResponse {
 export async function fetchSenateVideoObjects(
     collectionId = DEFAULT_COLLECTION_ID,
 ): Promise<VideoRecord[]> {
-    const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            _id: collectionId,
-            page: DEFAULT_PAGE,
-            results: DEFAULT_RESULTS,
-        }),
-    });
+    const response = await withRetry(
+        () =>
+            fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    _id: collectionId,
+                    page: DEFAULT_PAGE,
+                    results: DEFAULT_RESULTS,
+                }),
+            }),
+        { retries: 2, delayMs: 1000, factor: 2 },
+    );
 
     if (!response.ok) {
         throw new Error(`API request failed: ${response.status} ${response.statusText}`);
@@ -76,7 +81,7 @@ export async function dowloadVideo(id: string): Promise<string> {
         return filePath
     }
 
-    const res = await fetch(url);
+    const res = await withRetry(() => fetch(url), { retries: 2, delayMs: 1000, factor: 2 });
 
     if (!res.ok || !res.body) {
         throw new Error(`Failed to download video: ${res.status} ${res.statusText}`);

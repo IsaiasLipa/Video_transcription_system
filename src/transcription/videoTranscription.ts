@@ -1,22 +1,17 @@
 // Hosted Whisper transcription via OpenAI API
-import dotenv from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import OpenAI from "openai";
 
+import { config } from "../config";
+import { withRetry } from "../utils/retry";
 const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
 const CHUNK_SECONDS = 900;
 
-dotenv.config({ override: true });
-
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is not set.");
-}
-
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: config.openaiApiKey,
 });
 
 async function extractAudioToTempFile(videoPath: string, stem: string): Promise<string> {
@@ -55,10 +50,14 @@ async function extractAudioToTempFile(videoPath: string, stem: string): Promise<
 }
 
 async function runWhisper(audioPath: string): Promise<string> {
-  const response = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(audioPath),
-    model: "whisper-1",
-  });
+  const response = await withRetry(
+    () =>
+      openai.audio.transcriptions.create({
+        file: fs.createReadStream(audioPath),
+        model: "whisper-1",
+      }),
+    { retries: 2, delayMs: 1500, factor: 2 },
+  );
   return response.text;
 }
 
