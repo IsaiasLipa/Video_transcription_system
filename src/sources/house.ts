@@ -16,7 +16,10 @@ const ARCHIVE_URL =
 const VIDEO_BASE =
     "https://www.house.mi.gov/ArchiveVideoFiles/";
 
-const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+const dispatcher =
+    process.env.INSECURE_TLS === "true"
+        ? new Agent({ connect: { rejectUnauthorized: false } })
+        : undefined;
 
 function isWithinLastMonth(date: Date) {
     const now = new Date();
@@ -26,7 +29,7 @@ function isWithinLastMonth(date: Date) {
 }
 
 export async function fetchHouseVideoObject() {
-    const res = await fetch(ARCHIVE_URL, { dispatcher });
+    const res = dispatcher ? await fetch(ARCHIVE_URL, { dispatcher }) : await fetch(ARCHIVE_URL);
 
     if (!res.ok) {
         throw new Error(`Failed to fetch archive page: ${res.status}`);
@@ -79,13 +82,11 @@ export async function dowloadVideo(id: string):Promise<string> {
 
     // Skip if already downloaded
     if (fs.existsSync(filePath)) {
-        console.log(`⏭️  Skipping (already exists): ${fileName}`);
+        console.log(` Skipping (already exists): ${fileName}`);
         return filePath;
     }
 
-    console.log(`⬇️  Downloading: ${fileName}`);
-
-    const res = await fetch(url, { dispatcher });
+    const res = dispatcher ? await fetch(url, { dispatcher }) : await fetch(url);
 
     if (!res.ok || !res.body) {
         throw new Error(`Failed to download ${url}`);
@@ -100,7 +101,7 @@ export async function dowloadVideo(id: string):Promise<string> {
 }
 
 export async function getHouseVideo() {
-    const recentDBHouseVideos = await listVideos('HOUSE');
+    const recentDBHouseVideos = await listVideos("HOUSE");
     const lastFetchedHouseVideos = await fetchHouseVideoObject();
     const videosToTranscribe = getVideosToTranscribe(recentDBHouseVideos,lastFetchedHouseVideos);
     for (const vid of videosToTranscribe) {
@@ -117,6 +118,7 @@ export async function getHouseVideo() {
 
     for (const video of videosToTranscribe) {
         try {
+            await updateVideoStatus(video.id, "IN_PROGRESS");
             const videoPath = await dowloadVideo(video.id);
             console.log(videoPath)
             const transcript = await transcribeVideo(videoPath);

@@ -9,7 +9,7 @@ import path from "path";
 import fs from "node:fs";
 import { pipeline } from "stream/promises";
 import { transcribeVideo } from "../transcription/videoTranscription";
-import { listVideos, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe} from "../services/videos";
+import { listVideos, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 
 export interface RawVideo {
@@ -78,48 +78,21 @@ export async function dowloadVideo(id: string): Promise<string> {
 
     const res = await fetch(url);
 
-    if (!res.ok) {
+    if (!res.ok || !res.body) {
         throw new Error(`Failed to download video: ${res.status} ${res.statusText}`);
     }
-
-
 
     await pipeline(
         res.body as any,
         fs.createWriteStream(filePath)
     );
 
-    //console.log(`Saved video to ${filePath}`);
     return filePath
 }
 
-// export function getVideosToTranscribe(
-//     recentDBVideos: VideoRecord[],
-//     lastSenateVideos: RawVideo[],
-// ): VideoRecord[] {
-//     const idsInDb = new Set(recentDBVideos.map((vid) => vid.id));
-
-//     const videosInDBNotTranscribed = recentDBVideos.filter(
-//         (vid) => vid.status === "TO BE TRANSCRIBE" || "FAILED",
-//     );
-
-//     const videosNotInDB = lastSenateVideos
-//         .filter((vid) => !idsInDb.has(vid._id))
-//         .map((vid) => ({
-//             id: vid._id,
-//             source: "SENATE",
-//             name: vid.metadata.filename ?? null,
-//             status: "NEW",
-//             original_date: vid.original_date ?? null,
-//         }));
-
-//     return videosInDBNotTranscribed.concat(videosNotInDB);
-// }
-
-
 
 export async function getSenateVideos() {
-    const recentDBSenateVideos = await listVideos('SENATE');
+    const recentDBSenateVideos = await listVideos("SENATE");
 
     const lastSenateVideos = await fetchSenateVideoObjects();
 
@@ -139,6 +112,7 @@ export async function getSenateVideos() {
 
     for (const video of videosToTranscribe) {
         try {
+            await updateVideoStatus(video.id, "IN_PROGRESS");
             const videoPath = await dowloadVideo(video.id);
             console.log(videoPath)
             const transcript = await transcribeVideo(videoPath);

@@ -10,6 +10,8 @@ export async function createTranscript(record: TranscriptRecord): Promise<void> 
     `
     INSERT INTO transcripts (video_id, transcript)
     VALUES ($1, $2)
+    ON CONFLICT (video_id) DO UPDATE SET
+      transcript = EXCLUDED.transcript
     `,
     [record.videoId, record.transcript],
   );

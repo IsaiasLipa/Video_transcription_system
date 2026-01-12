@@ -27,15 +27,17 @@ export async function upsertVideo(video: VideoRecord): Promise<void> {
     );
 }
 
-export async function listVideos(source: string, limit = 10): Promise<VideoRecord[]> {
-    const result = await pool.query(
-        `SELECT id, source, name, status, original_date
-            FROM videos
-            WHERE source = $1
-            ORDER BY created_at DESC
-            LIMIT $2`,
-        [source, limit],
-    );
+export async function listVideos(source: string): Promise<VideoRecord[]> {
+    const params: Array<string | number> = [source];
+    let query = `
+        SELECT id, source, name, status, original_date
+        FROM videos
+        WHERE source = $1
+    `;
+    query += ` AND (status IS NULL OR status <> 'TRANSCRIBED')`;
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await pool.query(query, params);
 
     return result.rows.map((row) => ({
         id: row.id,
