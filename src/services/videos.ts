@@ -27,11 +27,16 @@ export async function upsertVideo(video: VideoRecord): Promise<void> {
     );
 }
 
-export async function listVideos(limit = 10): Promise<VideoRecord[]> {
+export async function listVideos(source: string, limit = 10): Promise<VideoRecord[]> {
     const result = await pool.query(
-        `SELECT id, source, name, status, original_date FROM videos ORDER BY created_at DESC LIMIT $1`,
-        [limit],
+        `SELECT id, source, name, status, original_date
+            FROM videos
+            WHERE source = $1
+            ORDER BY created_at DESC
+            LIMIT $2`,
+        [source, limit],
     );
+
     return result.rows.map((row) => ({
         id: row.id,
         source: row.source,
@@ -43,4 +48,13 @@ export async function listVideos(limit = 10): Promise<VideoRecord[]> {
 
 export async function updateVideoStatus(id: string, status: string): Promise<void> {
     await pool.query(`UPDATE videos SET status = $2 WHERE id = $1`, [id, status]);
+}
+
+export function getVideosToTranscribe(DBvideos: VideoRecord[], latestVideosFetch: VideoRecord[]): VideoRecord[] {
+    const idsInDb = new Set(DBvideos.map((vid) => vid.id));
+
+    const videosToTranscribe = DBvideos
+        .filter((vid) => vid.status !== "TRANSCRIBED")
+        .concat(latestVideosFetch.filter((vid) => !idsInDb.has(vid.id)));
+    return videosToTranscribe
 }

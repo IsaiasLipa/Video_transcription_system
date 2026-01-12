@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { Agent, fetch } from "undici";
-import { updateVideoStatus, upsertVideo } from "../services/videos";
+import { getVideosToTranscribe, listVideos, updateVideoStatus, upsertVideo } from "../services/videos";
 import { VideoRecord } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 import { transcribeVideo } from "../transcription/videoTranscription";
@@ -25,7 +25,7 @@ function isWithinLastMonth(date: Date) {
     return date >= oneMonthAgo;
 }
 
-export async function getRecentVideos() {
+export async function fetchHouseVideoObject() {
     const res = await fetch(ARCHIVE_URL, { dispatcher });
 
     if (!res.ok) {
@@ -54,7 +54,6 @@ export async function getRecentVideos() {
         if (isNaN(parsedDate.getTime())) return;
 
         if (isWithinLastMonth(parsedDate)) {
-
             videoObjects.push({
                 id: fileName,
                 source: "HOUSE",
@@ -101,8 +100,10 @@ export async function dowloadVideo(id: string):Promise<string> {
 }
 
 export async function getHouseVideo() {
-    const lastHouseVideos = await getRecentVideos();
-    for (const vid of lastHouseVideos) {
+    const recentDBHouseVideos = await listVideos('HOUSE');
+    const lastFetchedHouseVideos = await fetchHouseVideoObject();
+    const videosToTranscribe = getVideosToTranscribe(recentDBHouseVideos,lastFetchedHouseVideos);
+    for (const vid of videosToTranscribe) {
         if (vid.status == 'NEW') {
             await upsertVideo({
                 id: vid.id,
@@ -114,7 +115,7 @@ export async function getHouseVideo() {
         }
     }
 
-    for (const video of lastHouseVideos) {
+    for (const video of videosToTranscribe) {
         try {
             const videoPath = await dowloadVideo(video.id);
             console.log(videoPath)
@@ -127,7 +128,4 @@ export async function getHouseVideo() {
             await updateVideoStatus(video.id, "FAILED");
         }
     }
-    //console.log(lastHouseVideos);
 }
-
-getHouseVideo()

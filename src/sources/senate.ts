@@ -9,7 +9,7 @@ import path from "path";
 import fs from "node:fs";
 import { pipeline } from "stream/promises";
 import { transcribeVideo } from "../transcription/videoTranscription";
-import { listVideos, upsertVideo, updateVideoStatus, VideoRecord } from "../services/videos";
+import { listVideos, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe} from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 
 export interface RawVideo {
@@ -34,7 +34,7 @@ export interface RawVideoResponse {
 // returns the JSON objects of the seante videos
 export async function fetchSenateVideoObjects(
     collectionId = DEFAULT_COLLECTION_ID,
-): Promise<RawVideo[]> {
+): Promise<VideoRecord[]> {
     const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,7 +50,15 @@ export async function fetchSenateVideoObjects(
     }
 
     const data = (await response.json()) as RawVideoResponse;
-    return data.allFiles;
+    const videoObjects: VideoRecord[] = [];
+    data.allFiles.forEach((vid) => videoObjects.push({
+        id: vid._id,
+        source: "SENATE",
+        name: vid.metadata.filename ?? null,
+        status: "NEW",
+        original_date: vid.original_date ?? null,
+    }));;
+    return videoObjects
 }
 
 // dowloadsVideo file using the _id obtain from the fetchSenateVideoObjects()
@@ -85,40 +93,37 @@ export async function dowloadVideo(id: string): Promise<string> {
     return filePath
 }
 
-export function getVideosToTranscribe(
-    recentDBVideos: VideoRecord[],
-    lastSenateVideos: RawVideo[],
-): VideoRecord[] {
-    const idsInDb = new Set(recentDBVideos.map((vid) => vid.id));
+// export function getVideosToTranscribe(
+//     recentDBVideos: VideoRecord[],
+//     lastSenateVideos: RawVideo[],
+// ): VideoRecord[] {
+//     const idsInDb = new Set(recentDBVideos.map((vid) => vid.id));
 
-    const videosInDBNotTranscribed = recentDBVideos.filter(
-        (vid) => vid.status === "TO BE TRANSCRIBE" || "FAILED",
-    );
+//     const videosInDBNotTranscribed = recentDBVideos.filter(
+//         (vid) => vid.status === "TO BE TRANSCRIBE" || "FAILED",
+//     );
 
-    const videosNotInDB = lastSenateVideos
-        .filter((vid) => !idsInDb.has(vid._id))
-        .map((vid) => ({
-            id: vid._id,
-            source: "SENATE",
-            name: vid.metadata.filename ?? null,
-            status: "NEW",
-            original_date: vid.original_date ?? null,
-        }));
+//     const videosNotInDB = lastSenateVideos
+//         .filter((vid) => !idsInDb.has(vid._id))
+//         .map((vid) => ({
+//             id: vid._id,
+//             source: "SENATE",
+//             name: vid.metadata.filename ?? null,
+//             status: "NEW",
+//             original_date: vid.original_date ?? null,
+//         }));
 
-    return videosInDBNotTranscribed.concat(videosNotInDB);
-}
+//     return videosInDBNotTranscribed.concat(videosNotInDB);
+// }
 
 
 
 export async function getSenateVideos() {
-    const recentDBVideos = await listVideos();
-    //const recentDBVideosIDs = recentDBVideos.map((vid) => vid.id)
-    //console.log(recentDBVideos)
+    const recentDBSenateVideos = await listVideos('SENATE');
+
     const lastSenateVideos = await fetchSenateVideoObjects();
-    // console.log(lastSenateVideos)
-    // const videosToTranscribe = lastSenateVideos.filter((vid) => !recentDBVideosIDs.includes(vid._id))
-    // console.log(videosToTranscribe)
-    const videosToTranscribe = getVideosToTranscribe(recentDBVideos, lastSenateVideos)
+
+    const videosToTranscribe = getVideosToTranscribe(recentDBSenateVideos, lastSenateVideos)
 
     for (const vid of videosToTranscribe) {
         if (vid.status == 'NEW') {
@@ -147,5 +152,3 @@ export async function getSenateVideos() {
     }
 
 }
-
-getSenateVideos()
