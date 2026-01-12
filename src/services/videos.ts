@@ -56,7 +56,7 @@ export function getVideosToTranscribe(DBvideos: VideoRecord[], latestVideosFetch
     const idsInDb = new Set(DBvideos.map((vid) => vid.id));
 
     const videosToTranscribe = DBvideos
-        .filter((vid) => vid.status !== "TRANSCRIBED")
+        .filter((vid) => vid.status !== "TRANSCRIBED" && vid.status !== 'IN_PROGRESS')
         .concat(latestVideosFetch.filter((vid) => !idsInDb.has(vid.id)));
     return videosToTranscribe
 }

@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import fs from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import { Agent, fetch } from "undici";
 import { getVideosToTranscribe, listVideos, updateVideoStatus, upsertVideo } from "../services/videos";
 import { VideoRecord } from "../services/videos";
@@ -10,7 +11,7 @@ import { createTranscript } from "../services/transcripts";
 import { transcribeVideo } from "../transcription/videoTranscription";
 import { withRetry } from "../utils/retry";
 import { config } from "../config";
-
+import { isWithinLastMonth } from "../utils/date";
 
 const ARCHIVE_URL =
     "https://house.mi.gov/VideoArchive?handler=ArchiveVideoPartial&Year=2025&Type=All&Date=";
@@ -21,13 +22,6 @@ const VIDEO_BASE =
 const dispatcher = config.insecureTls
     ? new Agent({ connect: { rejectUnauthorized: false } })
     : undefined;
-
-function isWithinLastMonth(date: Date) {
-    const now = new Date();
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(now.getMonth() - 1);
-    return date >= oneMonthAgo;
-}
 
 export async function fetchHouseVideoObject() {
     const res = await withRetry(
@@ -56,17 +50,13 @@ export async function fetchHouseVideoObject() {
 
         const fileName = match[1]; // HAGRI-022025.mp4
 
-        // Parse date
-        const parsedDate = new Date(text);
-        if (isNaN(parsedDate.getTime())) return;
-
-        if (isWithinLastMonth(parsedDate)) {
+        if (isWithinLastMonth(text)) {
             videoObjects.push({
                 id: fileName,
                 source: "HOUSE",
                 name: fileName,
                 status: "NEW",
-                original_date: parsedDate,
+                original_date: text,
             });
 
         }
@@ -75,7 +65,7 @@ export async function fetchHouseVideoObject() {
     return videoObjects;
 }
 
-export async function dowloadVideo(id: string):Promise<string> {
+export async function downloadVideo(id: string):Promise<string> {
     const url = `${VIDEO_BASE}${id}`
     const outputDir = "./videos"
     console.log(url)
@@ -100,7 +90,7 @@ export async function dowloadVideo(id: string):Promise<string> {
     }
 
     await pipeline(
-        res.body,
+        Readable.fromWeb(res.body),
         fs.createWriteStream(filePath)
     );
 
@@ -126,7 +116,7 @@ export async function getHouseVideo() {
     for (const video of videosToTranscribe) {
         try {
             await updateVideoStatus(video.id, "IN_PROGRESS");
-            const videoPath = await dowloadVideo(video.id);
+            const videoPath = await downloadVideo(video.id);
             console.log(videoPath)
             const transcript = await transcribeVideo(videoPath);
             console.log(transcript)
