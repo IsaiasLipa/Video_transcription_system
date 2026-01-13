@@ -9,7 +9,7 @@ import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import type { ReadableStream as WebReadableStream } from "stream/web";
 import { transcribeVideo } from "../transcription/videoTranscription";
-import { listVideos, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe } from "../services/videos";
+import { listVideos, listVideoIds, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe, resetStaleInProgress } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 import { withRetry } from "../utils/retry";
 import { isWithinLastMonth } from "../utils/date";
@@ -126,23 +126,29 @@ export async function downloadVideo(id: string): Promise<string> {
 
 
 export async function getSenateVideos() {
+    await resetStaleInProgress("SENATE");
     const recentDBSenateVideos = await listVideos("SENATE");
+    const allSenateIds = await listVideoIds("SENATE");
     console.log('recentDBSenateVideos', recentDBSenateVideos)
 
     const lastSenateVideos = await fetchSenateVideoObjects();
     console.log('lastSenateVideos',lastSenateVideos)
-    const videosToTranscribe = getVideosToTranscribe(recentDBSenateVideos, lastSenateVideos)
+    const videosToTranscribe = getVideosToTranscribe(
+        recentDBSenateVideos,
+        lastSenateVideos,
+        new Set(allSenateIds),
+    )
     console.log('videosToTranscribe',videosToTranscribe)
-    for (const vid of videosToTranscribe) {
-        if (vid.status == 'NEW') {
-            await upsertVideo({
-                id: vid.id,
-                source: vid.source,
-                name: vid.name,
-                status: "TO BE TRANSCRIBE",
-                original_date: vid.original_date,
-            });
-        }
+    const idsInDb = new Set(allSenateIds);
+    const newVideos = lastSenateVideos.filter((vid) => !idsInDb.has(vid.id));
+    for (const vid of newVideos) {
+        await upsertVideo({
+            id: vid.id,
+            source: vid.source,
+            name: vid.name,
+            status: "TO BE TRANSCRIBE",
+            original_date: vid.original_date,
+        });
     }
 
     for (const video of videosToTranscribe) {
@@ -151,7 +157,6 @@ export async function getSenateVideos() {
             const videoPath = await downloadVideo(video.id);
             console.log(videoPath)
             const transcript = await transcribeVideo(videoPath);
-            console.log(transcript)
             await createTranscript({ videoId: video.id, transcript });
             await updateVideoStatus(video.id, "TRANSCRIBED");
         } catch (error) {

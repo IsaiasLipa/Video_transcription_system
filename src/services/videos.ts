@@ -49,14 +49,44 @@ export async function listVideos(source: string): Promise<VideoRecord[]> {
 }
 
 export async function updateVideoStatus(id: string, status: string): Promise<void> {
-    await pool.query(`UPDATE videos SET status = $2 WHERE id = $1`, [id, status]);
+    await pool.query(
+        `UPDATE videos SET status = $2, status_updated_at = NOW() WHERE id = $1`,
+        [id, status],
+    );
 }
 
-export function getVideosToTranscribe(DBvideos: VideoRecord[], latestVideosFetch: VideoRecord[]): VideoRecord[] {
-    const idsInDb = new Set(DBvideos.map((vid) => vid.id));
+export async function resetStaleInProgress(
+    source: string,
+    staleMinutes = 120,
+): Promise<number> {
+    const result = await pool.query(
+        `
+        UPDATE videos
+        SET status = 'TO BE TRANSCRIBE',
+            status_updated_at = NOW()
+        WHERE source = $1
+          AND status = 'IN_PROGRESS'
+          AND (status_updated_at IS NULL OR status_updated_at < NOW() - ($2 || ' minutes')::interval)
+        `,
+        [source, staleMinutes],
+    );
+    return result.rowCount ?? 0;
+}
+
+export async function listVideoIds(source: string): Promise<string[]> {
+    const result = await pool.query(`SELECT id FROM videos WHERE source = $1`, [source]);
+    return result.rows.map((row) => row.id as string);
+}
+
+export function getVideosToTranscribe(
+    DBvideos: VideoRecord[],
+    latestVideosFetch: VideoRecord[],
+    idsInDb?: Set<string>,
+): VideoRecord[] {
+    const ids = idsInDb ?? new Set(DBvideos.map((vid) => vid.id));
 
     const videosToTranscribe = DBvideos
         .filter((vid) => vid.status !== "TRANSCRIBED" && vid.status !== 'IN_PROGRESS')
-        .concat(latestVideosFetch.filter((vid) => !idsInDb.has(vid.id)));
+        .concat(latestVideosFetch.filter((vid) => !ids.has(vid.id)));
     return videosToTranscribe
 }

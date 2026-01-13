@@ -5,7 +5,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { Agent, fetch } from "undici";
-import { getVideosToTranscribe, listVideos, updateVideoStatus, upsertVideo } from "../services/videos";
+import { getVideosToTranscribe, listVideoIds, listVideos, resetStaleInProgress, updateVideoStatus, upsertVideo } from "../services/videos";
 import { VideoRecord } from "../services/videos";
 import { createTranscript } from "../services/transcripts";
 import { transcribeVideo } from "../transcription/videoTranscription";
@@ -97,20 +97,26 @@ export async function downloadVideo(id: string):Promise<string> {
     return filePath
 }
 
-export async function getHouseVideo() {
+export async function getHouseVideos() {
+    await resetStaleInProgress("HOUSE");
     const recentDBHouseVideos = await listVideos("HOUSE");
+    const allHouseIds = await listVideoIds("HOUSE");
     const lastFetchedHouseVideos = await fetchHouseVideoObject();
-    const videosToTranscribe = getVideosToTranscribe(recentDBHouseVideos,lastFetchedHouseVideos);
-    for (const vid of videosToTranscribe) {
-        if (vid.status == 'NEW') {
-            await upsertVideo({
-                id: vid.id,
-                source: vid.source,
-                name: vid.name,
-                status: "TO BE TRANSCRIBE",
-                original_date: vid.original_date,
-            });
-        }
+    const videosToTranscribe = getVideosToTranscribe(
+        recentDBHouseVideos,
+        lastFetchedHouseVideos,
+        new Set(allHouseIds),
+    );
+    const idsInDb = new Set(allHouseIds);
+    const newVideos = lastFetchedHouseVideos.filter((vid) => !idsInDb.has(vid.id));
+    for (const vid of newVideos) {
+        await upsertVideo({
+            id: vid.id,
+            source: vid.source,
+            name: vid.name,
+            status: "TO BE TRANSCRIBE",
+            original_date: vid.original_date,
+        });
     }
 
     for (const video of videosToTranscribe) {
@@ -119,7 +125,6 @@ export async function getHouseVideo() {
             const videoPath = await downloadVideo(video.id);
             console.log(videoPath)
             const transcript = await transcribeVideo(videoPath);
-            console.log(transcript)
             await createTranscript({ videoId: video.id, transcript });
             await updateVideoStatus(video.id, "TRANSCRIBED");
         } catch (error) {
