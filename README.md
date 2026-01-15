@@ -1,4 +1,4 @@
-# State Affairs Ingestor (Node + TypeScript)
+# State Affairs Senate and House Video Ingestor
 
 Ingests Michigan House and Senate hearing videos, downloads them, and creates transcripts. Designed for cron-friendly, repeatable runs with retry tracking in Postgres.
 
@@ -35,7 +35,7 @@ Then set `HOUSE_CA_BUNDLE=house.chain.pem` in `.env`.
 
 ## Database setup
 
-Create the tables (example):
+Relational databases were created with the following columns. One DB for the video and another for its corresponding transcript (https://console.neon.tech/app/projects/dry-frog-30244154):
 
 ```sql
 CREATE TABLE IF NOT EXISTS videos (
@@ -66,7 +66,7 @@ ALTER TABLE transcripts
 ADD CONSTRAINT IF NOT EXISTS transcripts_video_id_key UNIQUE (video_id);
 ```
 
-Optional status constraint:
+Status constraint were added to for the video status:
 
 ```sql
 ALTER TABLE videos
