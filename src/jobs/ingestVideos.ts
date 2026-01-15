@@ -1,4 +1,4 @@
-import { updateVideoStatus, VideoRecord } from "../services/videos";
+import { markFailed, markInProgress, markTranscribed, VideoRecord } from "../services/videos";
 import { fetchHouseVideoObject, downloadHouseVideo } from "../sources/house";
 import { fetchSenateVideoObjects, downloadSenateVideo } from "../sources/senate";
 import { getVideosToTranscribe, listVideosAndIds, resetStaleInProgress, upsertVideo } from "../services/videos";
@@ -26,15 +26,18 @@ async function ingestSource(
   }
 
   for (const video of videosToTranscribe) {
+    let stage = "DOWNLOAD";
     try {
-      await updateVideoStatus(video.id, "IN_PROGRESS");
+      await markInProgress(video.id);
       const path = await downloadVideo(video.id);
+      stage = "TRANSCRIBE";
       const transcript = await transcribeVideo(path);
+      stage = "DB_WRITE";
       await createTranscript({ videoId: video.id, transcript });
-      await updateVideoStatus(video.id, "TRANSCRIBED");
+      await markTranscribed(video.id);
     } catch (err) {
       console.error(`Failed processing video ${video.id}`, err);
-      await updateVideoStatus(video.id, "FAILED");
+      await markFailed(video.id, stage, String(err));
     }
   }
 }

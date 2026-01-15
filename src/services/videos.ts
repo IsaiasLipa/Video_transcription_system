@@ -35,6 +35,7 @@ export async function listVideos(source: string): Promise<VideoRecord[]> {
         WHERE source = $1
     `;
     query += ` AND (status IS NULL OR status <> 'TRANSCRIBED')`;
+    query += ` AND (next_retry_at IS NULL OR next_retry_at <= NOW())`;
     query += ` ORDER BY created_at DESC`;
 
     const result = await pool.query(query, params);
@@ -52,6 +53,59 @@ export async function updateVideoStatus(id: string, status: string): Promise<voi
     await pool.query(
         `UPDATE videos SET status = $2, status_updated_at = NOW() WHERE id = $1`,
         [id, status],
+    );
+}
+
+export async function markInProgress(id: string): Promise<void> {
+    await pool.query(
+        `
+        UPDATE videos
+        SET status = 'IN_PROGRESS',
+            in_progress_at = NOW(),
+            status_updated_at = NOW(),
+            last_error = NULL,
+            last_error_at = NULL,
+            last_error_stage = NULL,
+            next_retry_at = NULL
+        WHERE id = $1
+        `,
+        [id],
+    );
+}
+
+export async function markFailed(
+    id: string,
+    stage: string,
+    error: string,
+    baseDelayMinutes = 30,
+): Promise<void> {
+    await pool.query(
+        `
+        UPDATE videos
+        SET status = 'FAILED',
+            last_error = $2,
+            last_error_stage = $3,
+            last_error_at = NOW(),
+            retry_count = COALESCE(retry_count, 0) + 1,
+            next_retry_at = NOW() + (interval '1 minute' * ($4 * power(2, COALESCE(retry_count, 0)))),
+            status_updated_at = NOW()
+        WHERE id = $1
+        `,
+        [id, error.slice(0, 1000), stage, baseDelayMinutes],
+    );
+}
+
+export async function markTranscribed(id: string): Promise<void> {
+    await pool.query(
+        `
+        UPDATE videos
+        SET status = 'TRANSCRIBED',
+            transcribed_at = NOW(),
+            status_updated_at = NOW(),
+            next_retry_at = NULL
+        WHERE id = $1
+        `,
+        [id],
     );
 }
 
