@@ -1,16 +1,10 @@
 //scrapte/fetch Senate Videos
-
-const DEFAULT_COLLECTION_ID = "61b3adc8124d7d000891ca5c";
-const API_URL = "https://tf4pr3wftk.execute-api.us-west-2.amazonaws.com/default/api/all";
-
 import path from "path";
 import fs from "node:fs";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import type { ReadableStream as WebReadableStream } from "stream/web";
-import { transcribeVideo } from "../transcription/videoTranscription";
-import { listVideos, listVideoIds, upsertVideo, updateVideoStatus, VideoRecord, getVideosToTranscribe, resetStaleInProgress } from "../services/videos";
-import { createTranscript } from "../services/transcripts";
+import { VideoRecord } from "../services/videos";
 import { withRetry } from "../utils/retry";
 import { isWithinLastMonth } from "../utils/date";
 
@@ -31,6 +25,10 @@ export interface RawVideoResponse {
     count: number;
     allFiles: RawVideo[]
 }
+
+const DEFAULT_COLLECTION_ID = "61b3adc8124d7d000891ca5c";
+const API_URL = "https://tf4pr3wftk.execute-api.us-west-2.amazonaws.com/default/api/all";
+
 
 async function fetchSetOfVideoObjects(
     page: number,
@@ -96,7 +94,7 @@ export async function fetchSenateVideoObjects(): Promise<VideoRecord[]> {
 }
 
 // dowloadsVideo file using the _id obtain from the fetchSenateVideoObjects()
-export async function downloadVideo(id: string): Promise<string> {
+export async function downloadSenateVideo(id: string): Promise<string> {
     const url = `https://dlttx48mxf9m3.cloudfront.net/outputs/${id}/Default/MP4/out_1080.mp4`;
 
     const dir = path.join(process.cwd(), "videos");
@@ -122,47 +120,4 @@ export async function downloadVideo(id: string): Promise<string> {
     );
 
     return filePath
-}
-
-
-export async function getSenateVideos() {
-    await resetStaleInProgress("SENATE");
-    const recentDBSenateVideos = await listVideos("SENATE");
-    const allSenateIds = await listVideoIds("SENATE");
-    console.log('recentDBSenateVideos', recentDBSenateVideos)
-
-    const lastSenateVideos = await fetchSenateVideoObjects();
-    console.log('lastSenateVideos',lastSenateVideos)
-    const videosToTranscribe = getVideosToTranscribe(
-        recentDBSenateVideos,
-        lastSenateVideos,
-        new Set(allSenateIds),
-    )
-    console.log('videosToTranscribe',videosToTranscribe)
-    const idsInDb = new Set(allSenateIds);
-    const newVideos = lastSenateVideos.filter((vid) => !idsInDb.has(vid.id));
-    for (const vid of newVideos) {
-        await upsertVideo({
-            id: vid.id,
-            source: vid.source,
-            name: vid.name,
-            status: "TO BE TRANSCRIBE",
-            original_date: vid.original_date,
-        });
-    }
-
-    for (const video of videosToTranscribe) {
-        try {
-            await updateVideoStatus(video.id, "IN_PROGRESS");
-            const videoPath = await downloadVideo(video.id);
-            console.log(videoPath)
-            const transcript = await transcribeVideo(videoPath);
-            await createTranscript({ videoId: video.id, transcript });
-            await updateVideoStatus(video.id, "TRANSCRIBED");
-        } catch (error) {
-            console.error(`Failed processing video ${video.id}`, error);
-            await updateVideoStatus(video.id, "FAILED");
-        }
-    }
-
 }

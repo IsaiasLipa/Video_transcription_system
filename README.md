@@ -8,6 +8,18 @@ Simple script to fetch video objects from the API and download MP4s by `_id`.
 npm install
 ```
 
+## TLS note (House site)
+
+The Michigan House site serves an incomplete TLS chain. To avoid disabling TLS verification,
+generate a CA bundle locally and point the app at it:
+
+```bash
+openssl s_client -showcerts -servername www.house.mi.gov -connect www.house.mi.gov:443 </dev/null 2>/dev/null \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{print}' > ./house.chain.pem
+```
+
+Then set `HOUSE_CA_BUNDLE=house.chain.pem` in `.env`.
+
 ## Run
 
 ```bash

@@ -5,6 +5,8 @@ dist/
 tmp/
 videos/
 transcripts/
+xcrun_db
+house.chain.pem
 .env
 node_modules/
 .venv/

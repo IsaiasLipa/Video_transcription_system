@@ -62,7 +62,7 @@ export async function resetStaleInProgress(
     const result = await pool.query(
         `
         UPDATE videos
-        SET status = 'TO BE TRANSCRIBE',
+        SET status = 'TO_BE_TRANSCRIBE',
             status_updated_at = NOW()
         WHERE source = $1
           AND status = 'IN_PROGRESS'
@@ -73,9 +73,25 @@ export async function resetStaleInProgress(
     return result.rowCount ?? 0;
 }
 
-export async function listVideoIds(source: string): Promise<string[]> {
-    const result = await pool.query(`SELECT id FROM videos WHERE source = $1`, [source]);
-    return result.rows.map((row) => row.id as string);
+export async function listVideosAndIds(source: string): Promise<{
+    videos: VideoRecord[];
+    ids: Set<string>;
+}> {
+    const result = await pool.query(
+        `SELECT id, source, name, status, original_date
+         FROM videos
+         WHERE source = $1
+         ORDER BY created_at DESC`,
+        [source],
+    );
+    const videos = result.rows.map((row) => ({
+        id: row.id,
+        source: row.source,
+        name: row.name,
+        status: row.status,
+        original_date: row.original_date,
+    }));
+    return { videos, ids: new Set(videos.map((vid) => vid.id)) };
 }
 
 export function getVideosToTranscribe(

@@ -4,14 +4,12 @@ import fs from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import type { ReadableStream as WebReadableStream } from "stream/web";
 import { Agent, fetch } from "undici";
-import { getVideosToTranscribe, listVideoIds, listVideos, resetStaleInProgress, updateVideoStatus, upsertVideo } from "../services/videos";
 import { VideoRecord } from "../services/videos";
-import { createTranscript } from "../services/transcripts";
-import { transcribeVideo } from "../transcription/videoTranscription";
 import { withRetry } from "../utils/retry";
-import { config } from "../config";
 import { isWithinLastMonth } from "../utils/date";
+import { config } from "../config";
 
 const ARCHIVE_URL =
     "https://house.mi.gov/VideoArchive?handler=ArchiveVideoPartial&Year=2025&Type=All&Date=";
@@ -19,11 +17,22 @@ const ARCHIVE_URL =
 const VIDEO_BASE =
     "https://www.house.mi.gov/ArchiveVideoFiles/";
 
-const dispatcher = config.insecureTls
-    ? new Agent({ connect: { rejectUnauthorized: false } })
-    : undefined;
+const CA_CERT_PATH = config.houseCaBundlePath
+    ? path.resolve(process.cwd(), config.houseCaBundlePath)
+    : path.resolve(process.cwd(), "house.chain.pem");
+let caCert: string | undefined;
+if (fs.existsSync(CA_CERT_PATH)) {
+    const raw = fs.readFileSync(CA_CERT_PATH, "utf-8");
+    const matches = raw.match(/-----BEGIN CERTIFICATE-----[\\s\\S]*?-----END CERTIFICATE-----/g);
+    if (matches && matches.length > 1) {
+        caCert = matches.slice(1).join("\n");
+    } else {
+        caCert = raw;
+    }
+}
+const dispatcher = caCert ? new Agent({ connect: { ca: caCert } }) : undefined;
 
-export async function fetchHouseVideoObject() {
+export async function fetchHouseVideoObject(): Promise<VideoRecord[]> {
     const res = await withRetry(
         () => (dispatcher ? fetch(ARCHIVE_URL, { dispatcher }) : fetch(ARCHIVE_URL)),
         { retries: 2, delayMs: 1000, factor: 2 },
@@ -65,7 +74,7 @@ export async function fetchHouseVideoObject() {
     return videoObjects;
 }
 
-export async function downloadVideo(id: string):Promise<string> {
+export async function downloadHouseVideo(id: string):Promise<string> {
     const url = `${VIDEO_BASE}${id}`
     const outputDir = "./videos"
     console.log(url)
@@ -90,46 +99,9 @@ export async function downloadVideo(id: string):Promise<string> {
     }
 
     await pipeline(
-        Readable.fromWeb(res.body),
+        Readable.fromWeb(res.body as unknown as WebReadableStream),
         fs.createWriteStream(filePath)
     );
 
     return filePath
-}
-
-export async function getHouseVideos() {
-    await resetStaleInProgress("HOUSE");
-    const recentDBHouseVideos = await listVideos("HOUSE");
-    const allHouseIds = await listVideoIds("HOUSE");
-    const lastFetchedHouseVideos = await fetchHouseVideoObject();
-    const videosToTranscribe = getVideosToTranscribe(
-        recentDBHouseVideos,
-        lastFetchedHouseVideos,
-        new Set(allHouseIds),
-    );
-    const idsInDb = new Set(allHouseIds);
-    const newVideos = lastFetchedHouseVideos.filter((vid) => !idsInDb.has(vid.id));
-    for (const vid of newVideos) {
-        await upsertVideo({
-            id: vid.id,
-            source: vid.source,
-            name: vid.name,
-            status: "TO BE TRANSCRIBE",
-            original_date: vid.original_date,
-        });
-    }
-
-    for (const video of videosToTranscribe) {
-        try {
-            await updateVideoStatus(video.id, "IN_PROGRESS");
-            const videoPath = await downloadVideo(video.id);
-            console.log(videoPath)
-            const transcript = await transcribeVideo(videoPath);
-            await createTranscript({ videoId: video.id, transcript });
-            await updateVideoStatus(video.id, "TRANSCRIBED");
-        } catch (error) {
-            console.error(`Failed processing video ${video.id}`, error);
-            await updateVideoStatus(video.id, "FAILED");
-        }
-    }
 }

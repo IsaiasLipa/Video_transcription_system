@@ -13,5 +13,5 @@ function requireEnv(name: string): string {
 export const config = {
   databaseUrl: requireEnv("DATABASE_URL"),
   openaiApiKey: requireEnv("OPENAI_API_KEY"),
-  insecureTls: process.env.INSECURE_TLS === "true",
+  houseCaBundlePath: process.env.HOUSE_CA_BUNDLE,
 };
