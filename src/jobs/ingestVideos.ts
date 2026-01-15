@@ -1,9 +1,10 @@
 import { markFailed, markInProgress, markTranscribed, VideoRecord } from "../services/videos";
 import { fetchHouseVideoObject, downloadHouseVideo } from "../sources/house";
 import { fetchSenateVideoObjects, downloadSenateVideo } from "../sources/senate";
-import { getVideosToTranscribe, listVideosAndIds, resetStaleInProgress, upsertVideo } from "../services/videos";
+import { listVideosAndIds, resetStaleInProgress, upsertVideo } from "../services/videos";
 import { transcribeVideo } from "../transcription/videoTranscription";
 import { createTranscript } from "../services/transcripts";
+import { getVideosToTranscribe } from "../utils/videoSelection";
 
 type FetchFn = () => Promise<VideoRecord[]>;
 type DownloadFn = (id: string) => Promise<string>;

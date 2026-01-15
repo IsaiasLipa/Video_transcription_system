@@ -122,9 +122,7 @@ export async function transcribeVideo(source: string): Promise<string> {
   try {
     const split = await splitAudioIfNeeded(audioPath, stem);
     tempDir = split.tempDir;
-    console.log(tempDir)
     const chunks = split.chunks;
-    console.log(chunks)
     let fullText = "";
     for (const chunkPath of chunks) {
       const chunkText = await runWhisper(chunkPath);

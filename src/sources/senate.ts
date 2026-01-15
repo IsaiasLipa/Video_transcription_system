@@ -104,7 +104,6 @@ export async function downloadSenateVideo(id: string): Promise<string> {
 
     const exists = fs.existsSync(filePath);
     if (exists) {
-        console.log('file already dowloaded')
         return filePath
     }
 

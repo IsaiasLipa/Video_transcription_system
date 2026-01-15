@@ -82,6 +82,13 @@ npm run dev -- src/run.ts
 
 This runs House then Senate ingestion sequentially.
 
+## Tests
+
+```bash
+npm install
+npm test
+```
+
 ## Cron example
 
 ```cron

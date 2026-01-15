@@ -147,16 +147,3 @@ export async function listVideosAndIds(source: string): Promise<{
     }));
     return { videos, ids: new Set(videos.map((vid) => vid.id)) };
 }
-
-export function getVideosToTranscribe(
-    DBvideos: VideoRecord[],
-    latestVideosFetch: VideoRecord[],
-    idsInDb?: Set<string>,
-): VideoRecord[] {
-    const ids = idsInDb ?? new Set(DBvideos.map((vid) => vid.id));
-
-    const videosToTranscribe = DBvideos
-        .filter((vid) => vid.status !== "TRANSCRIBED" && vid.status !== 'IN_PROGRESS')
-        .concat(latestVideosFetch.filter((vid) => !ids.has(vid.id)));
-    return videosToTranscribe
-}

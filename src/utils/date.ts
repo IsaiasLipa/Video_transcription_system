@@ -1,6 +1,4 @@
-import { BlobOptions } from "buffer";
-
-export function isWithinLastMonth(date: Date | string | null | undefined):boolean {
+export function isWithinLastMonth(date: Date | string | null | undefined): boolean {
     if (!date) {
         return false;
     }

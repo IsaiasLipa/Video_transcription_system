@@ -77,7 +77,6 @@ export async function fetchHouseVideoObject(): Promise<VideoRecord[]> {
 export async function downloadHouseVideo(id: string):Promise<string> {
     const url = `${VIDEO_BASE}${id}`
     const outputDir = "./videos"
-    console.log(url)
     await fs.promises.mkdir(outputDir, { recursive: true });
 
     const fileName = path.basename(url);
@@ -85,7 +84,6 @@ export async function downloadHouseVideo(id: string):Promise<string> {
 
     // Skip if already downloaded
     if (fs.existsSync(filePath)) {
-        console.log(` Skipping (already exists): ${fileName}`);
         return filePath;
     }
 
