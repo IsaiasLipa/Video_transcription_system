@@ -30,4 +30,16 @@ describe("getVideosToTranscribe", () => {
     const result = getVideosToTranscribe(dbVideos, fetched, idsInDb);
     expect(result.map((item) => item.id)).toEqual(["A"]);
   });
+
+  it("skips db rows whose next_retry_at is still in the future", () => {
+    const now = new Date("2026-01-10T12:00:00Z");
+    const dbVideos: VideoRecord[] = [
+      { id: "A", status: "FAILED", next_retry_at: new Date("2026-01-10T13:00:00Z") },
+      { id: "B", status: "FAILED", next_retry_at: new Date("2026-01-10T11:00:00Z") },
+      { id: "C", status: "TO_BE_TRANSCRIBE", next_retry_at: null },
+    ];
+
+    const result = getVideosToTranscribe(dbVideos, [], undefined, now);
+    expect(result.map((item) => item.id).sort()).toEqual(["B", "C"]);
+  });
 });
