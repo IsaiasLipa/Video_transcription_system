@@ -6,6 +6,7 @@ export type VideoRecord = {
     name?: string | null;
     status?: string | null;
     original_date?: Date | string | null;
+    next_retry_at?: Date | string | null;
 };
 
 export async function upsertVideo(video: VideoRecord): Promise<void> {
@@ -132,7 +133,7 @@ export async function listVideosAndIds(source: string): Promise<{
     ids: Set<string>;
 }> {
     const result = await pool.query(
-        `SELECT id, source, name, status, original_date
+        `SELECT id, source, name, status, original_date, next_retry_at
          FROM videos
          WHERE source = $1
          ORDER BY created_at DESC`,
@@ -144,6 +145,7 @@ export async function listVideosAndIds(source: string): Promise<{
         name: row.name,
         status: row.status,
         original_date: row.original_date,
+        next_retry_at: row.next_retry_at,
     }));
     return { videos, ids: new Set(videos.map((vid) => vid.id)) };
 }

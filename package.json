@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "start": "node dist/fetchVideos.js",
+    "start": "node dist/run.js",
     "dev": "ts-node",
     "test": "vitest run"
   },
@@ -20,6 +20,7 @@
     "dotenv": "^17.2.3",
     "ffmpeg-static": "^5.3.0",
     "openai": "^6.15.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "undici": "^7.30.2"
   }
 }

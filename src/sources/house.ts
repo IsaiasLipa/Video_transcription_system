@@ -8,11 +8,11 @@ import type { ReadableStream as WebReadableStream } from "stream/web";
 import { Agent, fetch } from "undici";
 import { VideoRecord } from "../services/videos";
 import { withRetry } from "../utils/retry";
-import { isWithinLastMonth } from "../utils/date";
+import { archiveYears, isWithinLastMonth } from "../utils/date";
 import { config } from "../config";
 
-const ARCHIVE_URL =
-    "https://house.mi.gov/VideoArchive?handler=ArchiveVideoPartial&Year=2025&Type=All&Date=";
+const archiveUrl = (year: number) =>
+    `https://house.mi.gov/VideoArchive?handler=ArchiveVideoPartial&Year=${year}&Type=All&Date=`;
 
 const VIDEO_BASE =
     "https://www.house.mi.gov/ArchiveVideoFiles/";
@@ -33,8 +33,19 @@ if (fs.existsSync(CA_CERT_PATH)) {
 const dispatcher = caCert ? new Agent({ connect: { ca: caCert } }) : undefined;
 
 export async function fetchHouseVideoObject(): Promise<VideoRecord[]> {
+    const byId = new Map<string, VideoRecord>();
+    for (const year of archiveYears()) {
+        for (const video of await fetchHouseArchiveYear(year)) {
+            byId.set(video.id, video);
+        }
+    }
+    return [...byId.values()];
+}
+
+async function fetchHouseArchiveYear(year: number): Promise<VideoRecord[]> {
+    const url = archiveUrl(year);
     const res = await withRetry(
-        () => (dispatcher ? fetch(ARCHIVE_URL, { dispatcher }) : fetch(ARCHIVE_URL)),
+        () => (dispatcher ? fetch(url, { dispatcher }) : fetch(url)),
         { retries: 2, delayMs: 1000, factor: 2 },
     );
 

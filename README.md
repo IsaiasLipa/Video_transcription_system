@@ -25,16 +25,16 @@ A Node.js/TypeScript worker that finds recent **Michigan House and Senate** hear
    video → TRANSCRIBED            (on error → FAILED + backoff)
 ```
 
-1. **Fetch:** scrape the House video archive with `cheerio`, and query the Senate's video API. Only videos from the last month are kept.
+1. **Fetch:** scrape the House video archive with `cheerio` (the current year's archive, plus last year's in January), and query the Senate's video API. Only videos from the last month are kept.
 2. **Track:** insert new video IDs into `videos` with status `TO_BE_TRANSCRIBE`.
-3. **Process:** for each video that isn't `TRANSCRIBED` or `IN_PROGRESS`:
+3. **Process:** for each video that isn't `TRANSCRIBED` or `IN_PROGRESS`, and isn't waiting out a retry backoff:
    - download it to `./videos/`
    - extract the audio to MP3 with `ffmpeg`
    - split audio larger than 24 MB into 15-minute chunks, to stay under Whisper's upload limit
    - transcribe with `whisper-1` (with retries and exponential backoff)
    - save the transcript to the `transcripts` table and `./transcripts/`
 4. **Recover:**
-   - A failure records the error, the stage it failed in (`DOWNLOAD`, `TRANSCRIBE` or `DB_WRITE`) and a retry count, and sets `next_retry_at` with exponential backoff (30 min × 2ⁿ).
+   - A failure records the error, the stage it failed in (`DOWNLOAD`, `TRANSCRIBE` or `DB_WRITE`) and a retry count, and sets `next_retry_at` with exponential backoff (30 min × 2ⁿ). The video is skipped until that time passes.
    - At the start of each run, videos stuck `IN_PROGRESS` for more than 2 hours are reset to `TO_BE_TRANSCRIBE`.
 
 ## Project structure
@@ -56,7 +56,7 @@ tests/                             # Vitest unit tests for utils
 
 ## Prerequisites
 
-- Node.js 18+ (22 recommended)
+- Node.js 20.18+ (22 recommended)
 - PostgreSQL (Neon works fine)
 - `ffmpeg` on your `PATH`
 - An OpenAI API key
@@ -123,7 +123,12 @@ Then set `HOUSE_CA_BUNDLE=house.chain.pem`. If the variable isn't set, the scrap
 npm run dev -- src/run.ts
 ```
 
-This processes House, then Senate, one after the other, and exits.
+This processes House, then Senate, one after the other, and exits. To run the compiled version:
+
+```bash
+npm run build
+npm start
+```
 
 ### Scheduling with cron
 
@@ -137,7 +142,7 @@ This processes House, then Senate, one after the other, and exits.
 npm test
 ```
 
-Vitest unit tests cover the retry helper, the date filtering and the video-selection logic.
+Vitest unit tests cover the retry helper, the date filtering and archive-year selection, and the video-selection logic (including the retry backoff).
 
 ## Output
 
@@ -149,9 +154,3 @@ Vitest unit tests cover the retry helper, the date filtering and the video-selec
 | `./transcripts/`        | Plain-text transcripts |
 
 `videos/`, `transcripts/` and `.env` are git-ignored.
-
-## Known limitations
-
-- The House archive URL is hard-coded to the **2025** archive year (`src/sources/house.ts`).
-- The run loop doesn't yet check `next_retry_at`. Failed videos are retried on every run, not after their backoff time.
-- `npm start` points at `dist/fetchVideos.js`, which is currently empty. Use `npm run dev -- src/run.ts` (or build and run `dist/run.js`).

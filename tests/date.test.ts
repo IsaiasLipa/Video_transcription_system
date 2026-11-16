@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { isWithinLastMonth } from "../src/utils/date";
+import { archiveYears, isWithinLastMonth } from "../src/utils/date";
 
 describe("isWithinLastMonth", () => {
   afterEach(() => {
@@ -25,5 +25,15 @@ describe("isWithinLastMonth", () => {
     expect(isWithinLastMonth(undefined)).toBe(false);
     expect(isWithinLastMonth(null)).toBe(false);
     expect(isWithinLastMonth("not-a-date")).toBe(false);
+  });
+});
+
+describe("archiveYears", () => {
+  it("returns only the current year after January", () => {
+    expect(archiveYears(new Date("2026-11-15T12:00:00Z"))).toEqual([2026]);
+  });
+
+  it("also includes the previous year in January, since the last month spans both", () => {
+    expect(archiveYears(new Date("2026-01-10T12:00:00Z"))).toEqual([2026, 2025]);
   });
 });
